@@ -39,6 +39,12 @@ class TaskProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> fetchAllTasksForTeacher() async {
+    final response = await supabase.from('tasks').select();
+    _tasks = List<Map<String, dynamic>>.from(response);
+    notifyListeners();
+  }
+
   Future<void> addTask({
     required String title,
     required String description,

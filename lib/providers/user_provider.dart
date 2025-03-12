@@ -1,24 +1,53 @@
 import 'package:flutter/material.dart';
+import 'package:logger/logger.dart';
 import '../models/user_model.dart';
 import '../services/supabase_service.dart';
 
-class UserProvider extends ChangeNotifier {
+class UserProvider with ChangeNotifier {
   UserModel? _user;
-  bool _isLoading = false;
+  bool _isTeacher = false;
   String? _error;
+  bool _isLoading = false;
 
   UserModel? get user => _user;
-  bool get isLoading => _isLoading;
+  bool get isTeacher => _isTeacher;
   String? get error => _error;
+  bool get isLoading => _isLoading;
   bool get isLoggedIn => _user != null;
-  bool get isTeacher => _user?.isTeacher ?? false;
 
-  final SupabaseService _supabaseService = SupabaseService();
+  final SupabaseService supabaseService = SupabaseService();
+  final Logger _logger = Logger();
+
+  Future<void> loadUser() async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final user = supabaseService.client.auth.currentUser;
+      if (user != null) {
+        _logger.i('Authenticated user ID: ${user.id}');
+        final userData = await supabaseService.getUserProfile(user.id);
+        _user = UserModel.fromJson(userData);
+        _logger.i('User profile loaded: ${_user!.id}');
+        _isTeacher = _user!.role == 'teacher';
+      } else {
+        _logger.w('No authenticated user found');
+        _user = null;
+      }
+    } catch (e) {
+      _error = e.toString();
+      _logger.e('Error loading user: $_error');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 
   Future<void> signUp({
-    required String name,
     required String email,
     required String password,
+    required String name,
     required bool isTeacher,
   }) async {
     _isLoading = true;
@@ -26,23 +55,16 @@ class UserProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await _supabaseService.signUp(
-        name: name,
+      await supabaseService.signUp(
         email: email,
         password: password,
+        name: name,
         isTeacher: isTeacher,
       );
-
-      if (response.user != null) {
-        final userData = await _supabaseService.getUserProfile(
-          response.user!.id,
-        );
-        _user = UserModel.fromJson(userData);
-      } else {
-        _error = 'Failed to create user';
-      }
+      await loadUser();
     } catch (e) {
       _error = e.toString();
+      _logger.e('Error in signUp: $_error');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -55,40 +77,11 @@ class UserProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await _supabaseService.signIn(
-        email: email,
-        password: password,
-      );
-
-      if (response.user != null) {
-        try {
-          final userData = await _supabaseService.getUserProfile(
-            response.user!.id,
-          );
-          _user = UserModel.fromJson(userData);
-        } catch (e) {
-          // If profile doesn't exist, create it
-          if (e.toString().contains('contains 0 rows')) {
-            await _supabaseService.createUserProfile(
-              userId: response.user!.id,
-              email: email,
-              name: email.split('@')[0], // Temporary name from email
-              isTeacher: false, // Default to student
-            );
-            // Try getting the profile again
-            final userData = await _supabaseService.getUserProfile(
-              response.user!.id,
-            );
-            _user = UserModel.fromJson(userData);
-          } else {
-            rethrow;
-          }
-        }
-      } else {
-        _error = 'Invalid credentials';
-      }
+      await supabaseService.signIn(email: email, password: password);
+      await loadUser();
     } catch (e) {
       _error = e.toString();
+      _logger.e('Error in signIn: $_error');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -97,32 +90,16 @@ class UserProvider extends ChangeNotifier {
 
   Future<void> signOut() async {
     _isLoading = true;
-    notifyListeners();
-
-    try {
-      await _supabaseService.signOut();
-      _user = null;
-    } catch (e) {
-      _error = e.toString();
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  Future<void> loadUser() async {
-    _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      final currentUser = _supabaseService.client.auth.currentUser;
-      if (currentUser != null) {
-        final userData = await _supabaseService.getUserProfile(currentUser.id);
-        _user = UserModel.fromJson(userData);
-      }
+      await supabaseService.signOut();
+      _user = null;
+      _isTeacher = false;
     } catch (e) {
       _error = e.toString();
+      _logger.e('Error in signOut: $_error');
     } finally {
       _isLoading = false;
       notifyListeners();

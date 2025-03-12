@@ -13,7 +13,14 @@ void main() async {
 
   // Initialize Supabase using our service
   final supabaseService = SupabaseService();
-  await supabaseService.initialize();
+  try {
+    await supabaseService.initialize();
+  } catch (e) {
+    print(
+      'Failed to initialize Supabase: $e',
+    ); // Fallback print for critical error
+    return; // Exit if initialization fails
+  }
 
   runApp(
     MultiProvider(

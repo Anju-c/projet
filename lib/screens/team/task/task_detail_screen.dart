@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import '../../../providers/user_provider.dart';
 import '../../../providers/task_provider.dart';
+import '../../../providers/team_provider.dart';
 import '../../../models/file_model.dart';
 
 class TaskDetailScreen extends StatefulWidget {
@@ -25,18 +26,30 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   }
 
   Future<void> _updateTaskStatus(String status) async {
+    final taskProvider = Provider.of<TaskProvider>(context, listen: false);
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final teamProvider = Provider.of<TeamProvider>(context, listen: false);
+    final task = taskProvider.selectedTask;
+
+    if (userProvider.isTeacher &&
+        !teamProvider.teams.any((t) => t.id == task!['teamid'])) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Join the team to provide feedback'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
 
     try {
-      final taskProvider = Provider.of<TaskProvider>(context, listen: false);
-      final task = taskProvider.selectedTask;
-
       if (task != null) {
         await taskProvider.updateTaskStatus(task['taskid'], status);
 
-        // If status is rejected, add feedback
         if (status == 'rejected' &&
             _feedbackController.text.trim().isNotEmpty) {
           await taskProvider.addComment(
@@ -69,6 +82,39 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _approveAbstract() async {
+    final taskProvider = Provider.of<TaskProvider>(context, listen: false);
+    final teamProvider = Provider.of<TeamProvider>(context, listen: false);
+    final task = taskProvider.selectedTask;
+
+    if (task == null) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      await teamProvider.approveAbstract(task['teamid']);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Abstract approved, team status set to accepted'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error approving abstract: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
@@ -174,18 +220,14 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       return const Scaffold(body: Center(child: Text('No task selected')));
     }
 
-    // Extract attachments from the task
     final List<FileModel> files = [];
     if (task['attachments'] != null && task['attachments'] is List) {
       for (var attachment in task['attachments']) {
-        // Create a FileModel from the attachment URL
-        // This is a simplified approach - you might need to adjust based on your data structure
         files.add(
           FileModel(
             fileName: attachment.split('/').last,
             filePath: attachment,
-            uploadedAt:
-                DateTime.now(), // You might want to store this info in your task data
+            uploadedAt: DateTime.now(),
             uploadedBy: task['assignedto'],
           ),
         );
@@ -207,7 +249,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Task title and status
                     Row(
                       children: [
                         Expanded(
@@ -223,8 +264,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-
-                    // Task details card
                     Card(
                       child: Padding(
                         padding: const EdgeInsets.all(16.0),
@@ -275,8 +314,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
-
-                    // Feedback section (if available)
                     if (task['comments'] != null &&
                         task['comments'].isNotEmpty) ...[
                       Card(
@@ -337,8 +374,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                       ),
                       const SizedBox(height: 24),
                     ],
-
-                    // Files section
                     Card(
                       child: Padding(
                         padding: const EdgeInsets.all(16.0),
@@ -376,8 +411,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
-
-                    // Action buttons
                     if (!isTeacher &&
                         task['status'] != 'accepted' &&
                         task['status'] != 'rejected') ...[
@@ -412,8 +445,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                         ],
                       ),
                     ],
-
-                    // Teacher actions
                     if (isTeacher && task['status'] == 'done') ...[
                       Row(
                         children: [
@@ -441,6 +472,16 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                             ),
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: _approveAbstract,
+                        icon: const Icon(Icons.approval),
+                        label: const Text('Approve Abstract'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.purple,
+                          foregroundColor: Colors.white,
+                        ),
                       ),
                     ],
                   ],
@@ -530,13 +571,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       trailing: IconButton(
         icon: const Icon(Icons.download),
         onPressed: () {
-          // Since we're using the file URL directly, we can just show it
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(SnackBar(content: Text('File URL: ${file.filePath}')));
-
-          // Here you would typically launch a URL or download the file
-          // This would require additional implementation
         },
       ),
     );

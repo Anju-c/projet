@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:profin1/screens/dashboard/dashboard_screen.dart';
 import 'package:provider/provider.dart';
 import '../../providers/user_provider.dart';
 import '../../providers/team_provider.dart';
@@ -41,7 +42,9 @@ class _JoinTeamScreenState extends State<JoinTeamScreen> {
       );
 
       if (!mounted) return;
-      
+
+      await teamProvider.forceRefresh(userProvider.user!.id);
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Successfully joined team'),
@@ -49,10 +52,13 @@ class _JoinTeamScreenState extends State<JoinTeamScreen> {
         ),
       );
 
-      Navigator.pop(context);
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const DashboardScreen()),
+      );
     } catch (e) {
       if (!mounted) return;
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error joining team: ${e.toString()}'),
@@ -74,9 +80,7 @@ class _JoinTeamScreenState extends State<JoinTeamScreen> {
     final isTeacher = userProvider.isTeacher;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Join Team'),
-      ),
+      appBar: AppBar(title: const Text('Join Team')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Form(
@@ -86,19 +90,14 @@ class _JoinTeamScreenState extends State<JoinTeamScreen> {
             children: [
               const Text(
                 'Join an Existing Team',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               Text(
                 isTeacher
                     ? 'As a teacher, you can join multiple teams to guide students.'
                     : 'Enter the team code to join. Students can only join one team.',
-                style: TextStyle(
-                  color: Colors.grey.shade700,
-                ),
+                style: TextStyle(color: Colors.grey.shade700),
               ),
               const SizedBox(height: 24),
               TextFormField(
@@ -117,12 +116,12 @@ class _JoinTeamScreenState extends State<JoinTeamScreen> {
                   return null;
                 },
                 onChanged: (value) {
-                  // Convert to uppercase
                   if (value != value.toUpperCase()) {
-                    _teamCodeController.value = _teamCodeController.value.copyWith(
-                      text: value.toUpperCase(),
-                      selection: _teamCodeController.selection,
-                    );
+                    _teamCodeController.value = _teamCodeController.value
+                        .copyWith(
+                          text: value.toUpperCase(),
+                          selection: _teamCodeController.selection,
+                        );
                   }
                 },
               ),
@@ -136,11 +135,14 @@ class _JoinTeamScreenState extends State<JoinTeamScreen> {
                     backgroundColor: Colors.deepPurple,
                     foregroundColor: Colors.white,
                   ),
-                  child: _isLoading
-                      ? const CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        )
-                      : const Text('Join Team'),
+                  child:
+                      _isLoading
+                          ? const CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                          )
+                          : const Text('Join Team'),
                 ),
               ),
               const SizedBox(height: 24),
@@ -148,10 +150,7 @@ class _JoinTeamScreenState extends State<JoinTeamScreen> {
               const SizedBox(height: 16),
               const Text(
                 'What to expect?',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
               _buildInfoItem(
@@ -164,9 +163,10 @@ class _JoinTeamScreenState extends State<JoinTeamScreen> {
               _buildInfoItem(
                 icon: Icons.task_alt,
                 title: isTeacher ? 'Review Tasks' : 'Collaborate on Tasks',
-                description: isTeacher
-                    ? 'As a teacher, you can review and provide feedback on tasks.'
-                    : 'Work together with your team members on assigned tasks.',
+                description:
+                    isTeacher
+                        ? 'As a teacher, you can review and provide feedback on tasks.'
+                        : 'Work together with your team members on assigned tasks.',
               ),
               const SizedBox(height: 12),
               _buildInfoItem(
@@ -195,11 +195,7 @@ class _JoinTeamScreenState extends State<JoinTeamScreen> {
             color: Colors.deepPurple.shade50,
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(
-            icon,
-            color: Colors.deepPurple,
-            size: 24,
-          ),
+          child: Icon(icon, color: Colors.deepPurple, size: 24),
         ),
         const SizedBox(width: 16),
         Expanded(
@@ -216,10 +212,7 @@ class _JoinTeamScreenState extends State<JoinTeamScreen> {
               const SizedBox(height: 4),
               Text(
                 description,
-                style: TextStyle(
-                  color: Colors.grey.shade700,
-                  fontSize: 14,
-                ),
+                style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
               ),
             ],
           ),

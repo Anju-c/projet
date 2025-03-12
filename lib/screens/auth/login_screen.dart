@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:logger/logger.dart';
 import 'package:provider/provider.dart';
 import '../../providers/user_provider.dart';
 import '../dashboard/dashboard_screen.dart';
@@ -20,6 +21,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   bool _obscurePassword = true;
+  final Logger _logger = Logger();
 
   @override
   void dispose() {
@@ -51,7 +53,6 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         );
       } else {
-        // Navigate to dashboard on successful login
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (context) => const DashboardScreen()),
           (route) => false,
@@ -59,6 +60,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       if (!mounted) return;
+      _logger.e('Error signing in: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error signing in: $e'),
@@ -84,7 +86,6 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Back Button
                 IconButton(
                   icon: const Icon(Icons.arrow_back, color: Colors.white),
                   onPressed: () => Navigator.pop(context),
@@ -92,7 +93,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 24),
 
-                // Title
                 Text(
                   widget.isTeacher ? 'Teacher Login' : 'Student Login',
                   style: const TextStyle(
@@ -104,7 +104,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 48),
 
-                // Email Field
                 TextFormField(
                   controller: _emailController,
                   decoration: InputDecoration(
@@ -117,6 +116,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     prefixIcon: const Icon(Icons.email),
                   ),
                   keyboardType: TextInputType.emailAddress,
+                  style: TextStyle(
+                    color:
+                        _emailController.text.isNotEmpty
+                            ? Colors.black87
+                            : Colors.black54,
+                  ),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
                       return 'Please enter your email';
@@ -126,11 +131,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     }
                     return null;
                   },
+                  onChanged: (_) => setState(() {}),
                 ).animate().fadeIn(duration: const Duration(milliseconds: 600)),
 
                 const SizedBox(height: 16),
 
-                // Password Field
                 TextFormField(
                   controller: _passwordController,
                   decoration: InputDecoration(
@@ -153,6 +158,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   obscureText: _obscurePassword,
+                  style: TextStyle(
+                    color:
+                        _passwordController.text.isNotEmpty
+                            ? Colors.black87
+                            : Colors.black54,
+                  ),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
                       return 'Please enter your password';
@@ -162,11 +173,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     }
                     return null;
                   },
+                  onChanged: (_) => setState(() {}),
                 ).animate().fadeIn(duration: const Duration(milliseconds: 700)),
 
                 const SizedBox(height: 24),
 
-                // Login Button
                 SizedBox(
                   width: double.infinity,
                   height: 50,
@@ -191,7 +202,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 16),
 
-                // Sign Up Link
                 Center(
                   child: TextButton(
                     onPressed: () {

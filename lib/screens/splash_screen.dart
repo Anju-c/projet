@@ -19,19 +19,15 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _checkAuthStatus() async {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
 
-    // Delay for splash screen effect
     await Future.delayed(const Duration(seconds: 2));
 
-    // Check if user is logged in
     await userProvider.loadUser();
 
     if (!mounted) return;
 
     if (userProvider.isLoggedIn) {
-      // Navigate to dashboard
       Navigator.of(context).pushReplacementNamed('/dashboard');
     } else {
-      // Navigate to landing page
       Navigator.of(context).pushReplacementNamed('/landing');
     }
   }

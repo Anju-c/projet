@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:profin1/screens/dashboard/dashboard_screen.dart';
 import 'package:provider/provider.dart';
 import '../../providers/user_provider.dart';
 import '../../providers/team_provider.dart';
@@ -41,7 +42,9 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
       );
 
       if (!mounted) return;
-      
+
+      await teamProvider.forceRefresh(userProvider.user!.id);
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Team created successfully'),
@@ -49,10 +52,13 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
         ),
       );
 
-      Navigator.pop(context);
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const DashboardScreen()),
+      );
     } catch (e) {
       if (!mounted) return;
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error creating team: ${e.toString()}'),
@@ -74,9 +80,7 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
     final isTeacher = userProvider.isTeacher;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create Team'),
-      ),
+      appBar: AppBar(title: const Text('Create Team')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Form(
@@ -86,19 +90,14 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
             children: [
               const Text(
                 'Create a New Team',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               Text(
                 isTeacher
                     ? 'As a teacher, you can create a team to guide students.'
                     : 'Create a team and invite others to join using the team code.',
-                style: TextStyle(
-                  color: Colors.grey.shade700,
-                ),
+                style: TextStyle(color: Colors.grey.shade700),
               ),
               const SizedBox(height: 24),
               TextFormField(
@@ -125,11 +124,14 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
                     backgroundColor: Colors.deepPurple,
                     foregroundColor: Colors.white,
                   ),
-                  child: _isLoading
-                      ? const CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        )
-                      : const Text('Create Team'),
+                  child:
+                      _isLoading
+                          ? const CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                          )
+                          : const Text('Create Team'),
                 ),
               ),
               const SizedBox(height: 24),
@@ -137,10 +139,7 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
               const SizedBox(height: 16),
               const Text(
                 'What happens next?',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
               _buildInfoItem(
@@ -183,11 +182,7 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
             color: Colors.deepPurple.shade50,
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(
-            icon,
-            color: Colors.deepPurple,
-            size: 24,
-          ),
+          child: Icon(icon, color: Colors.deepPurple, size: 24),
         ),
         const SizedBox(width: 16),
         Expanded(
@@ -204,10 +199,7 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
               const SizedBox(height: 4),
               Text(
                 description,
-                style: TextStyle(
-                  color: Colors.grey.shade700,
-                  fontSize: 14,
-                ),
+                style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
               ),
             ],
           ),

@@ -4,8 +4,9 @@ class TeamModel {
   final String code;
   final String createdBy;
   final List<Map<String, dynamic>> members;
-  final bool isTeacher; // Whether the current user is a teacher in this team
-  final DateTime createdAt; // When the team was created
+  final bool isTeacher;
+  final DateTime createdAt;
+  final String? status;
 
   TeamModel({
     required this.id,
@@ -15,21 +16,30 @@ class TeamModel {
     required this.members,
     required this.isTeacher,
     DateTime? createdAt,
+    this.status,
   }) : createdAt = createdAt ?? DateTime.now();
 
   factory TeamModel.fromJson(Map<String, dynamic> json) {
-    return TeamModel(
-      id: json['teamid'],
-      name: json['teamname'],
-      code: json['teamcode'],
-      createdBy: json['createdby'],
-      members: (json['members'] as List).cast<Map<String, dynamic>>(),
-      isTeacher: json['is_teacher'] ?? false,
-      createdAt:
-          json['created_at'] != null
-              ? DateTime.parse(json['created_at'])
-              : DateTime.now(),
-    );
+    print("Raw JSON from Supabase: $json");
+    try {
+      return TeamModel(
+        id: json['teamid'],
+        name: json['teamname'],
+        code: json['teamcode'],
+        createdBy: json['createdby'],
+        members: (json['members'] as List).cast<Map<String, dynamic>>(),
+        isTeacher: json['is_teacher'] ?? false,
+        createdAt:
+            json['created_at'] != null
+                ? DateTime.parse(json['created_at'])
+                : DateTime.now(),
+        status: json['status'],
+      );
+    } catch (e) {
+      print("Error parsing team JSON: $e");
+      print("JSON keys: ${json.keys.toList()}");
+      rethrow;
+    }
   }
 
   Map<String, dynamic> toJson() {
@@ -40,6 +50,7 @@ class TeamModel {
       'createdby': createdBy,
       'members': members,
       'created_at': createdAt.toIso8601String(),
+      'status': status,
     };
   }
 }

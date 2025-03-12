@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:logger/logger.dart';
 import 'package:profin1/screens/team/task/task_detail_screen.dart';
 import 'package:provider/provider.dart';
 import '../../providers/user_provider.dart';
@@ -21,6 +22,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   bool _isLoading = false;
+  final Logger _logger = Logger();
 
   @override
   void initState() {
@@ -36,34 +38,78 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final teamProvider = Provider.of<TeamProvider>(context, listen: false);
 
-    if (userProvider.user != null) {
-      await teamProvider.loadUserTeams(userProvider.user!.id);
-    }
+    try {
+      if (userProvider.user != null) {
+        _logger.i('User ID: ${userProvider.user!.id}');
+        _logger.i('Is Teacher: ${userProvider.isTeacher}');
 
-    setState(() {
-      _isLoading = false;
-    });
+        final rawTeams = await teamProvider.getAllTeamsRaw();
+        _logger.i('Raw teams count: ${rawTeams.length}');
+        if (rawTeams.isNotEmpty) {
+          for (var team in rawTeams) {
+            _logger.i(
+              'Raw team: ${team['teamname']}, Members: ${team['members']}',
+            );
+          }
+        }
+
+        await teamProvider.forceRefresh(userProvider.user!.id);
+        await teamProvider.loadAllTeams();
+
+        _logger.i('Loaded user teams: ${teamProvider.teams.length}');
+        if (teamProvider.teams.isEmpty) {
+          _logger.w('No teams loaded for this user! Checking membership...');
+        } else {
+          for (var team in teamProvider.teams) {
+            _logger.i(
+              'Team: ${team.name}, ID: ${team.id}, Members: ${team.members}',
+            );
+          }
+        }
+        _logger.i('Loaded all teams: ${teamProvider.allTeams.length}');
+      } else {
+        _logger.w('No user logged in!');
+      }
+    } catch (e) {
+      _logger.e('Error loading teams: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error loading teams: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   List<TeamModel> _getFilteredTeams(List<TeamModel> teams) {
+    _logger.i(
+      'Filtering teams. Search query: "$_searchQuery", Total teams: ${teams.length}',
+    );
     if (_searchQuery.isEmpty) {
       return teams;
     }
-
-    return teams
-        .where(
-          (team) =>
-              team.name.toLowerCase().contains(_searchQuery.toLowerCase()),
-        )
-        .toList();
+    final filtered =
+        teams
+            .where(
+              (team) =>
+                  team.name.toLowerCase().contains(_searchQuery.toLowerCase()),
+            )
+            .toList();
+    _logger.i('Filtered teams: ${filtered.length}');
+    return filtered;
   }
 
   @override
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
     final teamProvider = Provider.of<TeamProvider>(context);
-    final filteredTeams = _getFilteredTeams(teamProvider.teams);
     final isTeacher = userProvider.isTeacher;
+    final displayTeams = isTeacher ? teamProvider.allTeams : teamProvider.teams;
+    final filteredTeams = _getFilteredTeams(displayTeams);
 
     return Scaffold(
       appBar: AppBar(
@@ -101,6 +147,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       onChanged: (value) {
                         setState(() {
                           _searchQuery = value;
+                          _logger.i('Search query updated: $_searchQuery');
                         });
                       },
                     ),
@@ -148,7 +195,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   ),
                                   const SizedBox(height: 16),
                                   Text(
-                                    teamProvider.teams.isEmpty
+                                    displayTeams.isEmpty
                                         ? 'No teams yet'
                                         : 'No teams match your search',
                                     style: const TextStyle(
@@ -157,7 +204,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: 24),
-                                  if (teamProvider.teams.isEmpty)
+                                  if (displayTeams.isEmpty)
                                     ElevatedButton.icon(
                                       icon: const Icon(Icons.add),
                                       label: Text(
@@ -179,6 +226,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 itemCount: filteredTeams.length,
                                 itemBuilder: (context, index) {
                                   final team = filteredTeams[index];
+                                  _logger.i('Rendering team: ${team.name}');
                                   return TeamCard(
                                     team: team,
                                     onTap: () {
@@ -210,12 +258,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _showTeamActionDialog(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final teamProvider = Provider.of<TeamProvider>(context, listen: false);
     final isTeacher = userProvider.isTeacher;
     final isStudent = !isTeacher;
 
-    // Students can only join one team
-    if (isStudent &&
-        Provider.of<TeamProvider>(context, listen: false).teams.isNotEmpty) {
+    if (isStudent && teamProvider.teams.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Students can only join one team'),
@@ -236,27 +283,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ListTile(
                   leading: const Icon(Icons.create),
                   title: const Text('Create a Team'),
-                  onTap: () {
+                  onTap: () async {
                     Navigator.pop(context);
-                    Navigator.push(
+                    await Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (context) => const CreateTeamScreen(),
                       ),
                     );
+                    if (mounted) {
+                      _loadTeams();
+                    }
                   },
                 ),
                 ListTile(
                   leading: const Icon(Icons.group_add),
                   title: const Text('Join a Team'),
-                  onTap: () {
+                  onTap: () async {
                     Navigator.pop(context);
-                    Navigator.push(
+                    await Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (context) => const JoinTeamScreen(),
                       ),
                     );
+                    if (mounted) {
+                      _loadTeams();
+                    }
                   },
                 ),
               ],
