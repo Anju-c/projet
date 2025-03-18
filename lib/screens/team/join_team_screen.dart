@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:profin1/screens/dashboard/dashboard_screen.dart';
 import 'package:provider/provider.dart';
-import '../../providers/user_provider.dart';
 import '../../providers/team_provider.dart';
+import '../../providers/user_provider.dart';
+import '../dashboard/dashboard_screen.dart';
 
 class JoinTeamScreen extends StatefulWidget {
-  const JoinTeamScreen({super.key});
+  final String? initialTeamCode;
+
+  const JoinTeamScreen({
+    super.key,
+    this.initialTeamCode,
+  });
 
   @override
   State<JoinTeamScreen> createState() => _JoinTeamScreenState();
@@ -13,8 +18,14 @@ class JoinTeamScreen extends StatefulWidget {
 
 class _JoinTeamScreenState extends State<JoinTeamScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _teamCodeController = TextEditingController();
+  late TextEditingController _teamCodeController;
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _teamCodeController = TextEditingController(text: widget.initialTeamCode);
+  }
 
   @override
   void dispose() {
@@ -23,45 +34,47 @@ class _JoinTeamScreenState extends State<JoinTeamScreen> {
   }
 
   Future<void> _joinTeam() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
     setState(() {
       _isLoading = true;
     });
 
     try {
-      final userProvider = Provider.of<UserProvider>(context, listen: false);
       final teamProvider = Provider.of<TeamProvider>(context, listen: false);
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      
+      final teamCode = _teamCodeController.text.trim().toUpperCase();
+      final userId = userProvider.user?.id;
+      
+      if (userId == null) {
+        throw Exception('User not logged in');
+      }
 
       await teamProvider.joinTeam(
-        teamCode: _teamCodeController.text.trim().toUpperCase(),
-        userId: userProvider.user!.id,
-        isTeacher: userProvider.isTeacher,
+        teamid: teamCode,
+        userId: userId,
       );
-
+      
       if (!mounted) return;
-
-      await teamProvider.forceRefresh(userProvider.user!.id);
-
+      
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Successfully joined team'),
           backgroundColor: Colors.green,
         ),
       );
-
+      
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const DashboardScreen()),
       );
     } catch (e) {
       if (!mounted) return;
-
+      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error joining team: ${e.toString()}'),
+          content: Text('Failed to join team: $e'),
           backgroundColor: Colors.red,
         ),
       );
@@ -77,10 +90,12 @@ class _JoinTeamScreenState extends State<JoinTeamScreen> {
   @override
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
-    final isTeacher = userProvider.isTeacher;
+    final isTeacher = userProvider.currentUser?.role == 'teacher' ?? false;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Join Team')),
+      appBar: AppBar(
+        title: const Text('Join Team'),
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Form(
@@ -109,12 +124,11 @@ class _JoinTeamScreenState extends State<JoinTeamScreen> {
                   hintText: 'Enter 5-character code (e.g., AB123)',
                 ),
                 textCapitalization: TextCapitalization.characters,
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter a team code';
-                  }
-                  return null;
-                },
+                validator:
+                    (value) =>
+                        value == null || value.trim().isEmpty
+                            ? 'Please enter a team code'
+                            : null,
                 onChanged: (value) {
                   if (value != value.toUpperCase()) {
                     _teamCodeController.value = _teamCodeController.value
@@ -156,8 +170,7 @@ class _JoinTeamScreenState extends State<JoinTeamScreen> {
               _buildInfoItem(
                 icon: Icons.group,
                 title: 'Team Access',
-                description:
-                    'You\'ll get access to the team\'s tasks and members.',
+                description: 'Access team tasks and members.',
               ),
               const SizedBox(height: 12),
               _buildInfoItem(
@@ -165,14 +178,14 @@ class _JoinTeamScreenState extends State<JoinTeamScreen> {
                 title: isTeacher ? 'Review Tasks' : 'Collaborate on Tasks',
                 description:
                     isTeacher
-                        ? 'As a teacher, you can review and provide feedback on tasks.'
-                        : 'Work together with your team members on assigned tasks.',
+                        ? 'Review and provide feedback.'
+                        : 'Work with team members.',
               ),
               const SizedBox(height: 12),
               _buildInfoItem(
                 icon: Icons.file_present,
                 title: 'Access Files',
-                description: 'View and download files shared within the team.',
+                description: 'View and download team files.',
               ),
             ],
           ),

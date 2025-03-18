@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:profin1/screens/dashboard/dashboard_screen.dart';
 import 'package:provider/provider.dart';
+import 'dart:math';
 import '../../providers/user_provider.dart';
 import '../../providers/team_provider.dart';
+import '../dashboard/dashboard_screen.dart';
 
 class CreateTeamScreen extends StatefulWidget {
   const CreateTeamScreen({super.key});
@@ -23,27 +24,22 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
   }
 
   Future<void> _createTeam() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
       final teamProvider = Provider.of<TeamProvider>(context, listen: false);
 
       await teamProvider.createTeam(
-        teamName: _teamNameController.text.trim(),
-        userId: userProvider.user!.id,
-        isTeacher: userProvider.isTeacher,
+        teamname: _teamNameController.text.trim(),
+        teamcode: _generateTeamCode(),
+        createdBy: userProvider.user!.id,
+        status: 'active',
       );
 
       if (!mounted) return;
-
-      await teamProvider.forceRefresh(userProvider.user!.id);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -51,7 +47,6 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
           backgroundColor: Colors.green,
         ),
       );
-
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const DashboardScreen()),
@@ -61,23 +56,27 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error creating team: ${e.toString()}'),
+          content: Text('Error creating team: $e'),
           backgroundColor: Colors.red,
         ),
       );
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  String _generateTeamCode() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    final random = Random();
+    return String.fromCharCodes(
+      Iterable.generate(5, (_) => chars.codeUnitAt(random.nextInt(chars.length))),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
-    final isTeacher = userProvider.isTeacher;
+    final isTeacher = userProvider.user!.role == 'teacher' || userProvider.user!.role == 'student';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Create Team')),
@@ -107,12 +106,11 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.group),
                 ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter a team name';
-                  }
-                  return null;
-                },
+                validator:
+                    (value) =>
+                        value == null || value.trim().isEmpty
+                            ? 'Please enter a team name'
+                            : null,
               ),
               const SizedBox(height: 16),
               SizedBox(
@@ -145,21 +143,19 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
               _buildInfoItem(
                 icon: Icons.code,
                 title: 'Team Code',
-                description:
-                    'A unique 5-character code will be generated for your team.',
+                description: 'A unique 5-character code will be generated.',
               ),
               const SizedBox(height: 12),
               _buildInfoItem(
                 icon: Icons.share,
                 title: 'Share Code',
-                description:
-                    'Share this code with others so they can join your team.',
+                description: 'Share this code with others to join.',
               ),
               const SizedBox(height: 12),
               _buildInfoItem(
                 icon: Icons.task_alt,
                 title: 'Manage Tasks',
-                description: 'Create and assign tasks to team members.',
+                description: 'Create and assign tasks.',
               ),
             ],
           ),

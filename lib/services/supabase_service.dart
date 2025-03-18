@@ -1,399 +1,336 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:logger/logger.dart';
+import '../models/user_model.dart';
+import '../models/task_model.dart';
+import '../models/team_model.dart';
 
 class SupabaseService {
-  static final SupabaseClient _client = Supabase.instance.client;
-  final Logger _logger = Logger();
+  final SupabaseClient _client;
 
-  // Singleton instance
-  static final SupabaseService _instance = SupabaseService._internal();
+  SupabaseService(this._client);
 
-  factory SupabaseService() => _instance;
+  // Auth Methods
+  Future<UserModel> getCurrentUser() async {
+    final user = _client.auth.currentUser;
+    if (user == null) throw Exception('No user logged in');
 
-  SupabaseService._internal();
-
-  // Initialize Supabase client
-  Future<void> initialize() async {
-    try {
-      await Supabase.initialize(
-        url:
-            'https://bjtijiyjqmfphyibkpma.supabase.co', // Replace with your Supabase URL
-        anonKey:
-            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJqdGlqaXlqcW1mcGh5aWJrcG1hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDA2NDU5NzAsImV4cCI6MjA1NjIyMTk3MH0.BrPFmPy39lkXQbFWjrMMbcc-AEabWTEgppaK1ddqU8k', // Replace with your Supabase Anon Key
-        debug: true,
-      );
-      _logger.i('***** Supabase init completed *****');
-      await checkTablesExist();
-      await ensureUsersTable(); // Ensure the users table matches the schema
-    } catch (e) {
-      _logger.e('Error initializing Supabase: $e');
-      if (e.toString().contains('infinite recursion')) {
-        _logger.w(
-          'RLS policy may be misconfigured. Consider disabling RLS or fixing the policy.',
-        );
-      }
-      rethrow;
-    }
-  }
-
-  SupabaseClient get client => _client;
-
-  Future<void> checkTablesExist() async {
-    try {
-      _logger.i('Checking if tables exist...');
-      final usersExist =
-          await client.from('users').select().limit(1).maybeSingle();
-      _logger.i('Users table exists: ${usersExist != null}');
-      final teamsExist =
-          await client.from('teams').select().limit(1).maybeSingle();
-      _logger.i('Teams table exists: ${teamsExist != null}');
-      final tasksExist =
-          await client.from('tasks').select().limit(1).maybeSingle();
-      _logger.i('Tasks table exists: ${tasksExist != null}');
-      _logger.i('All tables exist and are accessible');
-    } catch (e) {
-      _logger.e('Error checking tables: $e');
-      rethrow;
-    }
-  }
-
-  // Ensure the users table exists with the correct schema
-  Future<void> ensureUsersTable() async {
-    try {
-      // Supabase doesn't provide a direct way to list tables via the client,
-      // so we assume the table exists if the previous query succeeded.
-      // If the table schema doesn't match, we'll catch errors in getUserProfile.
-      _logger.i('Ensuring users table schema...');
-    } catch (e) {
-      _logger.e('Error ensuring users table: $e');
-      rethrow;
-    }
-  }
-
-  Future<Map<String, dynamic>> getUserProfile(String userId) async {
-    try {
-      _logger.i('Fetching user profile for userId: $userId');
-      final response =
-          await client
-              .from('users')
-              .select()
-              .eq('userid', userId) // Changed from 'id' to 'userid'
-              .single(); // Use .single() directly instead of .execute()
-      if (response == null) {
-        _logger.w('No profile found for userId: $userId, creating default...');
-        await client.from('users').insert({
-          'userid': userId, // Changed from 'id' to 'userid'
-          'email':
-              (await client.auth.getUser(userId)).user?.email ??
-              'unknown@example.com',
-          'name': 'Unknown User',
-          'role': 'student',
-          'accesscode': null,
-        });
-        return await client
+    final response =
+        await _client
             .from('users')
-            .select()
-            .eq('userid', userId) // Changed from 'id' to 'userid'
+            .select('*, role') // Include role in the select statement
+            .eq('userid', user.id)
             .single();
-      }
-      _logger.i('User profile fetched: ${response['userid']}');
-      return response;
-    } catch (e) {
-      _logger.e('Error fetching user profile for $userId: $e');
-      rethrow;
-    }
+
+    return UserModel.fromJson(response);
   }
 
-  Future<void> signUp({
+  Future<List<UserModel>> getUsers() async {
+    final response = await _client.from('users').select();
+
+    return response.map((json) => UserModel.fromJson(json)).toList();
+  }
+
+  Future<UserModel> signIn({
+    required String email,
+    required String password,
+  }) async {
+    final response = await _client.auth.signInWithPassword(
+      email: email,
+      password: password,
+    );
+
+    if (response.user == null) {
+      throw Exception('Failed to sign in');
+    }
+
+    return getCurrentUser();
+  }
+
+  Future<UserModel> signUp({
     required String email,
     required String password,
     required String name,
-    required bool isTeacher,
+    required String role,
   }) async {
-    try {
-      _logger.i('Signing up user with email: $email');
-      final response = await client.auth.signUp(
-        email: email,
-        password: password,
-      );
+    final response = await _client.auth.signUp(
+      email: email,
+      password: password,
+    );
 
-      if (response.user != null) {
-        await client.from('users').insert({
-          'userid': response.user!.id, // Changed from 'id' to 'userid'
-          'email': email,
-          'name': name,
-          'role': isTeacher ? 'teacher' : 'student',
-          'accesscode': null,
-        });
-        _logger.i('User signed up and profile created: ${response.user!.id}');
-      } else {
-        throw Exception('User signup failed: No user returned');
-      }
-    } catch (e) {
-      _logger.e('Error signing up: $e');
-      rethrow;
+    if (response.user == null) {
+      throw Exception('Failed to sign up');
     }
-  }
 
-  Future<void> signIn({required String email, required String password}) async {
-    try {
-      _logger.i('Signing in user with email: $email');
-      final response = await client.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
-      if (response.user == null) {
-        throw Exception('Sign-in failed: No user returned');
-      }
-      _logger.i('User signed in: ${response.user!.id}');
-    } catch (e) {
-      _logger.e('Error signing in: $e');
-      rethrow;
-    }
+    await _client.from('users').insert({
+      'userid': response.user!.id,
+      'email': email,
+      'name': name,
+      'role': role,
+    });
+
+    return getCurrentUser();
   }
 
   Future<void> signOut() async {
-    try {
-      _logger.i('Signing out user');
-      await client.auth.signOut();
-      _logger.i('User signed out successfully');
-    } catch (e) {
-      _logger.e('Error signing out: $e');
-      rethrow;
-    }
+    await _client.auth.signOut();
   }
 
-  Future<List<Map<String, dynamic>>> getUserTeams(String userId) async {
-    try {
-      _logger.i('Fetching teams for userId: $userId');
-      final teams =
-          await client
-              .from('teams')
-              .select()
-              .contains('members', '{"userid": "$userId"}')
-              .maybeSingle(); // Use .maybeSingle() for safety
-
-      if (teams == null) {
-        _logger.i(
-          'No teams found with contains filter. Trying manual filtering...',
-        );
-        final allTeams = await client.from('teams').select();
-        _logger.i('All teams in DB: ${allTeams.length}');
-
-        final userTeams =
-            allTeams.where((team) {
-              final members = team['members'] as List?;
-              if (members == null) return false;
-              return members.any(
-                (member) => member is Map && member['userid'] == userId,
-              );
-            }).toList();
-
-        _logger.i('Manually filtered teams: ${userTeams.length}');
-        return userTeams.map<Map<String, dynamic>>((team) {
-          final members = team['members'] as List;
-          final userMember = members.firstWhere(
-            (member) => member['userid'] == userId,
-            orElse: () => {'role': 'student'},
-          );
-          return {...team, 'is_teacher': userMember['role'] == 'teacher'};
-        }).toList();
-      }
-
-      final members = teams['members'] as List;
-      _logger.i('Team ${teams['teamid']} has ${members.length} members');
-      final userMember = members.firstWhere(
-        (member) => member['userid'] == userId,
-        orElse: () => {'role': 'student'},
-      );
-      return [
-        {...teams, 'is_teacher': userMember['role'] == 'teacher'},
-      ];
-    } catch (e) {
-      _logger.e('Error fetching teams for user $userId: $e');
-      try {
-        _logger.i('Attempting fallback manual filtering...');
-        final allTeams = await client.from('teams').select();
-        _logger.i('All teams in DB: ${allTeams.length}');
-
-        final userTeams =
-            allTeams.where((team) {
-              final members = team['members'] as List?;
-              if (members == null) return false;
-              return members.any(
-                (member) => member is Map && member['userid'] == userId,
-              );
-            }).toList();
-
-        _logger.i('Manually filtered teams: ${userTeams.length}');
-        return userTeams.map<Map<String, dynamic>>((team) {
-          final members = team['members'] as List;
-          final userMember = members.firstWhere(
-            (member) => member['userid'] == userId,
-            orElse: () => {'role': 'student'},
-          );
-          return {...team, 'is_teacher': userMember['role'] == 'teacher'};
-        }).toList();
-      } catch (fallbackError) {
-        _logger.e('Fallback failed: $fallbackError');
-        rethrow;
-      }
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> getAllTeams() async {
-    try {
-      final teams = await client.from('teams').select();
-      _logger.i('Fetched all teams: ${teams.length}');
-      return teams;
-    } catch (e) {
-      _logger.e('Error fetching all teams: $e');
-      rethrow;
-    }
-  }
-
-  Future<Map<String, dynamic>> createTeam({
-    required String teamName,
+  Future<UserModel> updateProfile({
     required String userId,
-    required bool isTeacher,
+    required String name,
+    required String role,
   }) async {
-    try {
-      final teamCode = _generateTeamCode();
-      final teamData = {
-        'teamname': teamName,
-        'teamcode': teamCode,
-        'createdby': userId,
-        'members': [
-          {
-            'userid': userId,
-            'role': isTeacher ? 'teacher' : 'student',
-            'joined_at': DateTime.now().toIso8601String(),
-          },
-        ],
-        'status': 'pending',
-      };
-      final response =
-          await client.from('teams').insert(teamData).select().single();
-      _logger.i('Team created: ${response['teamname']}');
-      return response;
-    } catch (e) {
-      _logger.e('Error creating team: $e');
-      rethrow;
-    }
+    await _client
+        .from('users')
+        .update({'name': name, 'role': role})
+        .eq('id', userId);
+
+    return getCurrentUser();
   }
 
-  Future<Map<String, dynamic>> joinTeam({
-    required String teamCode,
+  // Team Methods
+  Future<List<TeamModel>> getUserTeams(String userId, String role) async {
+    // 1. Fetch all teams
+    final allTeamsResponse = await _client.from('teams').select('*');
+    // Optional: newest first
+    Set<String> joinedTeamIds = {};
+    // 2. Fetch the team the user has joined (should be at most 1 for student)
+    if (role == 'student') {
+      final joinedTeamResponse = await _client
+          .from('team_members')
+          .select('teamid')
+          .eq('userid', userId);
+
+      joinedTeamIds =
+          joinedTeamResponse.map((e) => e['teamid'] as String).toSet();
+    }
+    // Map each team, set hasJoined flag
+
+    return (allTeamsResponse as List).map((team) {
+      final isJoined = joinedTeamIds.contains(team['teamid']);
+      return TeamModel.fromJson({...team, 'hasJoined': isJoined});
+    }).toList();
+  }
+
+  Future<TeamModel> createTeam({
+    required String teamname,
+    required String teamcode,
+    required String createdBy,
+    required String status,
+  }) async {
+    final response =
+        await _client
+            .from('teams')
+            .insert({
+              'teamname': teamname,
+              'teamcode': teamcode,
+              'createdby': createdBy,
+              'status': status,
+            })
+            .select()
+            .single();
+
+    // Add creator as team member
+    await _client.from('team_members').insert({
+      'teamid': response['teamid'],
+      'userid': createdBy,
+      'role': 'admin',
+    });
+
+    return TeamModel.fromJson(response);
+  }
+
+  Future<TeamModel> updateTeam({
+    required String teamid,
+    String? teamname,
+    String? teamcode,
+    String? status,
+  }) async {
+    final data = <String, dynamic>{
+      if (teamname != null) 'teamname': teamname,
+      if (teamcode != null) 'teamcode': teamcode,
+      if (status != null) 'status': status,
+    };
+
+    final response =
+        await _client
+            .from('teams')
+            .update(data)
+            .eq('teamid', teamid)
+            .select()
+            .single();
+
+    return TeamModel.fromJson(response);
+  }
+
+  Future<void> deleteTeam(String teamid) async {
+    // Delete team members first due to foreign key constraint
+    await _client.from('team_members').delete().eq('teamid', teamid);
+
+    // Delete tasks associated with the team
+    await _client.from('tasks').delete().eq('teamid', teamid);
+
+    // Finally delete the team
+    await _client.from('teams').delete().eq('teamid', teamid);
+  }
+
+  Future<void> joinTeam({
+    required String teamid,
     required String userId,
-    required bool isTeacher,
+    String role = 'member',
   }) async {
-    try {
-      final team =
-          await client.from('teams').select().eq('teamcode', teamCode).single();
-      final members = (team['members'] as List?) ?? [];
-      if (!members.any((m) => m['userid'] == userId)) {
-        members.add({
-          'userid': userId,
-          'role': isTeacher ? 'teacher' : 'student',
-          'joined_at': DateTime.now().toIso8601String(),
-        });
-        final updatedTeam =
-            await client
-                .from('teams')
-                .update({'members': members})
-                .eq('teamcode', teamCode)
-                .select()
-                .single();
-        _logger.i('User $userId joined team: ${updatedTeam['teamname']}');
-        return updatedTeam;
-      }
-      _logger.i('User $userId already in team: ${team['teamname']}');
-      return team;
-    } catch (e) {
-      _logger.e('Error joining team: $e');
-      rethrow;
-    }
+    await _client.from('team_members').insert({
+      'teamid': teamid,
+      'userid': userId,
+      'role': role,
+    });
   }
 
-  Future<void> updateTeamName({
+  Future<void> leaveTeam({
+    required String teamid,
+    required String userId,
+  }) async {
+    await _client
+        .from('team_members')
+        .delete()
+        .eq('teamid', teamid)
+        .eq('userid', userId);
+  }
+
+  Future<UserModel> getUser(String userId) async {
+    final response =
+        await _client
+            .from('users')
+            .select('*, role') // Include role in the select statement
+            .eq('id', userId)
+            .single();
+
+    return UserModel.fromJson(response);
+  }
+
+  Future<UserModel> updateUser({
+    required String userId,
+    String? name,
+    bool? isTeacher,
+  }) async {
+    final data = <String, dynamic>{
+      if (name != null) 'name': name,
+      if (isTeacher != null) 'is_teacher': isTeacher,
+    };
+
+    final response =
+        await _client
+            .from('users')
+            .update(data)
+            .eq('id', userId)
+            .select()
+            .single();
+
+    return UserModel.fromJson(response);
+  }
+
+  Future<List<UserModel>> getTeamMembers(String teamId) async {
+    final response = await _client
+        .from('team_members')
+        .select('user:users(*)')
+        .eq('teamid', teamId);
+
+    return response.map((json) => UserModel.fromJson(json['user'])).toList();
+  }
+
+  // Task Methods
+  Future<List<TaskModel>> getTeamTasks(String teamId) async {
+    final response = await _client.from('tasks').select().eq('teamid', teamId);
+
+    return response.map((json) => TaskModel.fromJson(json)).toList();
+  }
+
+  Future<TaskModel> createTask({
     required String teamId,
-    required String newName,
+    required String title,
+    required String description,
+    required DateTime dueDate,
+    required TaskStatus status,
+    String? assignedTo,
   }) async {
-    try {
-      await client
-          .from('teams')
-          .update({'teamname': newName})
-          .eq('teamid', teamId);
-      _logger.i('Team $teamId name updated to $newName');
-    } catch (e) {
-      _logger.e('Error updating team name: $e');
-      rethrow;
-    }
+    final user = _client.auth.currentUser;
+    if (user == null) throw Exception('No user logged in');
+
+    final response =
+        await _client
+            .from('tasks')
+            .insert({
+              'teamid': teamId,
+              'title': title,
+              'description': description,
+              'duedate': dueDate.toIso8601String(),
+              'status': status.toString().split('.').last,
+              'assignedto': assignedTo,
+              'createdby': user.id,
+            })
+            .select()
+            .single();
+
+    return TaskModel.fromJson(response);
   }
 
-  Future<void> approveAbstract(String teamId) async {
-    try {
-      await client
-          .from('teams')
-          .update({'status': 'accepted'})
-          .eq('teamid', teamId);
-      _logger.i('Abstract approved for team $teamId');
-    } catch (e) {
-      _logger.e('Error approving abstract: $e');
-      rethrow;
-    }
+  Future<TaskModel> updateTask({
+    required String taskId,
+    required String teamId,
+    String? title,
+    String? description,
+    DateTime? dueDate,
+    TaskStatus? status,
+    String? assignedTo,
+  }) async {
+    final data = <String, dynamic>{
+      if (title != null) 'title': title,
+      if (description != null) 'description': description,
+      if (dueDate != null) 'duedate': dueDate.toIso8601String(),
+      if (status != null) 'status': status.toString().split('.').last,
+      if (assignedTo != null) 'assignedto': assignedTo,
+    };
+
+    final response =
+        await _client
+            .from('tasks')
+            .update(data)
+            .eq('taskid', taskId)
+            .eq('teamid', teamId)
+            .select()
+            .single();
+
+    return TaskModel.fromJson(response);
   }
 
-  Future<List<Map<String, dynamic>>> getTeamMembers(String teamId) async {
-    try {
-      final team =
-          await client
-              .from('teams')
-              .select('members')
-              .eq('teamid', teamId)
-              .single();
-      final members = (team['members'] as List?) ?? [];
-      _logger.i('Fetched ${members.length} members for team $teamId');
-      return members.map((m) => m as Map<String, dynamic>).toList();
-    } catch (e) {
-      _logger.e('Error fetching team members: $e');
-      rethrow;
-    }
+  Future<void> deleteTask(String taskId, String teamId) async {
+    await _client
+        .from('tasks')
+        .delete()
+        .eq('taskid', taskId)
+        .eq('teamid', teamId);
   }
 
-  Future<Map<String, dynamic>> getSprintProgress(String teamId) async {
-    try {
-      final tasks = await client.from('tasks').select().eq('teamid', teamId);
-      final total = tasks.length;
-      final completed = tasks.where((t) => t['status'] == 'completed').length;
-      final inProgress =
-          tasks.where((t) => t['status'] == 'in_progress').length;
-      final todo = tasks.where((t) => t['status'] == 'todo').length;
-      final progressPercentage = total > 0 ? (completed / total) * 100 : 0;
-      _logger.i('Sprint progress for team $teamId: $progressPercentage%');
-      return {
-        'total': total,
-        'completed': completed,
-        'in_progress': inProgress,
-        'todo': todo,
-        'progress_percentage': progressPercentage,
-      };
-    } catch (e) {
-      _logger.e('Error fetching sprint progress: $e');
-      rethrow;
-    }
-  }
+  Future<TaskModel> addComment({
+    required String taskId,
+    required String teamId,
+    required String content,
+    required String userId,
+  }) async {
+    await _client.from('comments').insert({
+      'taskid': taskId,
+      'teamid': teamId,
+      'content': content,
+      'userid': userId,
+    });
 
-  String _generateTeamCode() {
-    const length = 5;
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    return String.fromCharCodes(
-      Iterable.generate(
-        length,
-        (_) => chars.codeUnitAt(
-          DateTime.now().microsecondsSinceEpoch % chars.length,
-        ),
-      ),
-    );
+    final response =
+        await _client
+            .from('tasks')
+            .select()
+            .eq('taskid', taskId)
+            .eq('teamid', teamId)
+            .single();
+
+    return TaskModel.fromJson(response);
   }
 }

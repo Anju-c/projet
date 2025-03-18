@@ -18,32 +18,25 @@ class TeamMemberList extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.people_outline,
-              size: 64,
-              color: Colors.grey,
-            ),
+            Icon(Icons.people_outline, size: 64, color: Colors.grey),
             SizedBox(height: 16),
             Text(
               'No team members yet',
-              style: TextStyle(
-                fontSize: 18,
-                color: Colors.grey,
-              ),
+              style: TextStyle(fontSize: 18, color: Colors.grey),
             ),
           ],
         ),
       );
     }
 
-    // Separate teachers and students
-    final teachers = members.where((member) => member.isTeacher).toList();
-    final students = members.where((member) => !member.isTeacher).toList();
+    final guides = members.where((member) => member.role == 'teacher').toList();
+    final students =
+        members.where((member) => !member.role.contains('teacher')).toList();
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        if (teachers.isNotEmpty) ...[
+        if (guides.isNotEmpty) ...[
           const Text(
             'Guides',
             style: TextStyle(
@@ -53,7 +46,7 @@ class TeamMemberList extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          ...teachers.map((teacher) => _buildMemberTile(teacher, true)),
+          ...guides.map((guide) => _buildMemberTile(guide, true)),
           const SizedBox(height: 24),
         ],
         if (students.isNotEmpty) ...[
@@ -72,36 +65,38 @@ class TeamMemberList extends StatelessWidget {
     );
   }
 
-  Widget _buildMemberTile(UserModel member, bool isTeacher) {
+  Widget _buildMemberTile(UserModel member, bool isGuide) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: isTeacher ? Colors.blue.shade100 : Colors.deepPurple.shade100,
+          backgroundColor:
+              isGuide ? Colors.blue.shade100 : Colors.deepPurple.shade100,
           child: Text(
             member.name.substring(0, 1).toUpperCase(),
             style: TextStyle(
-              color: isTeacher ? Colors.blue.shade800 : Colors.deepPurple.shade800,
+              color:
+                  isGuide ? Colors.blue.shade800 : Colors.deepPurple.shade800,
               fontWeight: FontWeight.bold,
             ),
           ),
         ),
         title: Text(
           member.name,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Text(
+          member.role=='teacher'?'Teacher':'Student',
+          style: TextStyle(
+            color: member.role == 'teacher' ? Colors.blue : Colors.green,
           ),
         ),
-        subtitle: Text(member.email),
         trailing: Chip(
           label: Text(
-            isTeacher ? 'Guide' : 'Student',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-            ),
+            member.role == 'teacher' ? 'Guide' : 'Student',
+            style: const TextStyle(color: Colors.white, fontSize: 12),
           ),
-          backgroundColor: isTeacher ? Colors.blue.shade700 : Colors.deepPurple,
+          backgroundColor: member.role == 'teacher' ? Colors.blue.shade700 : Colors.deepPurple,
           padding: const EdgeInsets.symmetric(horizontal: 8),
         ),
       ),

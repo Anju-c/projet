@@ -1,80 +1,129 @@
 import 'package:flutter/material.dart';
+import 'package:profin1/providers/auth_provider.dart';
 import '../../../models/team_model.dart';
+import '../../../providers/task_provider.dart';
+import '../../../models/task_model.dart';
+import 'package:provider/provider.dart';
+import '../../../screens/team/task/task_list_screen.dart'; // adjust the path if needed
+
 
 class TeamCard extends StatelessWidget {
   final TeamModel team;
-  final VoidCallback onTap;
+  final bool isTeacher;
 
-  const TeamCard({super.key, required this.team, required this.onTap});
+  const TeamCard({
+    super.key,
+    required this.team,
+    required this.isTeacher,
+  
+  });
 
   @override
   Widget build(BuildContext context) {
+    final taskProvider = Provider.of<TaskProvider>(context);
+    final tasks = taskProvider.tasks.where((task) => task.teamId == team.teamid).toList();
+    final completedTasks = tasks.where((task) => task.status == TaskStatus.done).length;
+    final totalTasks = tasks.length;
+    final progress = totalTasks > 0 ? (completedTasks / totalTasks) : 0.0;
+
     return Card(
-      elevation: 2,
-      margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
       child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        onTap: () { final authProvider = Provider.of<AuthProvider>(context, listen: false);
+  final user = authProvider.currentUser;
+
+  if (user == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('You must be logged in to view tasks.')),
+    );
+    return;
+  }
+
+  if (user.role == 'teacher') {
+    // ✅ Teachers can view all tasks (even if they haven't joined)
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TaskListScreen(teamId: team.teamid),
+      ),
+    );
+  } else if (team.hasJoined) {
+    // ✅ Students can only view if they joined
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TaskListScreen(teamId: team.teamid),
+      ),
+    );
+  } else {
+    // ❌ Students who haven't joined see this:
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Join this team to view tasks.')),
+    );
+  }},
         child: Padding(
           padding: const EdgeInsets.all(16.0),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
-                backgroundColor: Colors.deepPurple.shade100,
-                child: Text(
-                  team.name.substring(0, 1).toUpperCase(),
-                  style: TextStyle(
-                    color: Colors.deepPurple.shade800,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      team.name,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Team Code: ${team.code}',
-                      style: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Column(
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Chip(
-                    label: Text(
-                      team.isTeacher ? 'Guide' : 'Member',
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                  Expanded(
+                    child: Text(
+                      team.teamname,
+                      style: Theme.of(context).textTheme.titleMedium,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    backgroundColor:
-                        team.isTeacher
-                            ? Colors.blue.shade700
-                            : Colors.deepPurple,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
                   ),
-                  const SizedBox(height: 8),
-                  Chip(
-                    label: Text(
-                      team.status ?? 'Pending',
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8.0,
+                      vertical: 4.0,
                     ),
-                    backgroundColor:
-                        team.status == 'accepted' ? Colors.green : Colors.grey,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12.0),
+                      border: Border.all(
+                        color: Colors.blue,
+                        width: 1.0,
+                      ),
+                    ),
+                    child: Text(
+                      team.teamcode,
+                      style: const TextStyle(
+                        color: Colors.blue,
+                        fontSize: 12.0,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8.0),
+              Text(
+                '',
+                style: Theme.of(context).textTheme.bodyMedium,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 16.0),
+              LinearProgressIndicator(
+                value: progress,
+                backgroundColor: Colors.grey[200],
+                valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
+              ),
+              const SizedBox(height: 8.0),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '$completedTasks of $totalTasks tasks completed',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  Text(
+                    '${(progress * 100).toStringAsFixed(0)}%',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                   ),
                 ],
               ),

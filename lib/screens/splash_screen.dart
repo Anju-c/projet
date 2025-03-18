@@ -21,7 +21,16 @@ class _SplashScreenState extends State<SplashScreen> {
 
     await Future.delayed(const Duration(seconds: 2));
 
-    await userProvider.loadUser();
+    try {
+      await userProvider.loadUser();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error loading user: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
 
     if (!mounted) return;
 

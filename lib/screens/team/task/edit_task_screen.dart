@@ -1,38 +1,39 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../models/task_model.dart';
 import '../../../providers/task_provider.dart';
-import '../../../providers/team_provider.dart';
+import '../../../providers/auth_provider.dart';
 
 class EditTaskScreen extends StatefulWidget {
   final TaskModel task;
+  final String teamId;
 
-  const EditTaskScreen({super.key, required this.task});
+  const EditTaskScreen({
+    super.key,
+    required this.task,
+    required this.teamId,
+  });
 
   @override
   State<EditTaskScreen> createState() => _EditTaskScreenState();
 }
 
 class _EditTaskScreenState extends State<EditTaskScreen> {
-  final _formKey = GlobalKey<FormState>();
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
-  String? _selectedMemberId;
-  DateTime _deadline = DateTime.now();
+  late DateTime _dueDate;
+  late TaskStatus _status;
+  String? _assignedTo;
   bool _isLoading = false;
-  final SupabaseClient supabase = Supabase.instance.client;
 
   @override
   void initState() {
     super.initState();
     _titleController = TextEditingController(text: widget.task.title);
-    _descriptionController = TextEditingController(
-      text: widget.task.description,
-    );
-    _selectedMemberId = widget.task.assignedTo;
-    _deadline = widget.task.dueDate;
+    _descriptionController = TextEditingController(text: widget.task.description);
+    _dueDate = widget.task.dueDate;
+    _status = widget.task.status;
+    _assignedTo = widget.task.assignedTo;
   }
 
   @override
@@ -43,180 +44,149 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
   }
 
   Future<void> _updateTask() async {
-    if (!_formKey.currentState!.validate() || _selectedMemberId == null) {
-      if (_selectedMemberId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please select a team member'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+    if (_titleController.text.isEmpty || _descriptionController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill in all required fields')),
+      );
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
       final taskProvider = Provider.of<TaskProvider>(context, listen: false);
-
-      // Update the task using Supabase directly
-      await supabase
-          .from('tasks')
-          .update({
-            'title': _titleController.text.trim(),
-            'description': _descriptionController.text.trim(),
-            'assignedto': _selectedMemberId!,
-            'duedate': _deadline.toIso8601String(),
-          })
-          .eq('taskid', widget.task.taskId); // Use taskId instead of id
-
-      // Refresh the tasks list
-      await taskProvider.fetchTasksByTeam(widget.task.teamId);
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Task updated successfully'),
-          backgroundColor: Colors.green,
-        ),
+      await taskProvider.updateTask(
+        taskId: widget.task.id,
+        teamId: widget.teamId,
+        title: _titleController.text,
+        description: _descriptionController.text,
+        dueDate: _dueDate,
+        status: _status,
+        assignedTo: _assignedTo,
       );
-
-      Navigator.pop(context);
+      if (mounted) {
+        Navigator.pop(context);
+      }
     } catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error updating task: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error updating task: $e')),
+        );
+      }
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
-  Future<void> _selectDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
+  Future<void> _selectDate() async {
+    final picked = await showDatePicker(
       context: context,
-      initialDate: _deadline,
+      initialDate: _dueDate,
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 365)),
     );
-    if (picked != null && picked != _deadline) {
-      setState(() {
-        _deadline = picked;
-      });
+    if (picked != null) {
+      setState(() => _dueDate = picked);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final teamProvider = Provider.of<TeamProvider>(context);
-    final members = teamProvider.teamMembers;
-
     return Scaffold(
-      appBar: AppBar(title: const Text('Edit Task')),
-      body: Padding(
+      appBar: AppBar(
+        title: const Text('Edit Task'),
+        actions: [
+          if (_isLoading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: CircularProgressIndicator(),
+              ),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.save),
+              onPressed: _updateTask,
+            ),
+        ],
+      ),
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: [
-              const Text(
-                'Edit Task',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _titleController,
+              decoration: const InputDecoration(
+                labelText: 'Title',
+                border: OutlineInputBorder(),
               ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _titleController,
-                decoration: const InputDecoration(
-                  labelText: 'Task Title',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.task_alt),
-                ),
-                validator:
-                    (value) =>
-                        value == null || value.trim().isEmpty
-                            ? 'Please enter a task title'
-                            : null,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _descriptionController,
+              decoration: const InputDecoration(
+                labelText: 'Description',
+                border: OutlineInputBorder(),
               ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _descriptionController,
-                decoration: const InputDecoration(
-                  labelText: 'Task Description',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.description),
-                ),
-                maxLines: 5,
-                validator:
-                    (value) =>
-                        value == null || value.trim().isEmpty
-                            ? 'Please enter a description'
-                            : null,
+              maxLines: 3,
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              title: const Text('Due Date'),
+              subtitle: Text(_dueDate.toString().split(' ')[0]),
+              trailing: const Icon(Icons.calendar_today),
+              onTap: _selectDate,
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<TaskStatus>(
+              value: _status,
+              decoration: const InputDecoration(
+                labelText: 'Status',
+                border: OutlineInputBorder(),
               ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: _selectedMemberId,
-                decoration: const InputDecoration(
-                  labelText: 'Assign To',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.person),
-                ),
-                items:
-                    members.map((member) {
-                      return DropdownMenuItem<String>(
-                        value: member.id,
-                        child: Text(member.name),
-                      );
-                    }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedMemberId = value;
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-              InkWell(
-                onTap: () => _selectDate(context),
-                child: InputDecorator(
+              items: TaskStatus.values.map((status) {
+                return DropdownMenuItem(
+                  value: status,
+                  child: Text(status.toString().split('.').last),
+                );
+              }).toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() => _status = value);
+                }
+              },
+            ),
+            const SizedBox(height: 16),
+            Consumer<AuthProvider>(
+              builder: (context, authProvider, _) {
+                return DropdownButtonFormField<String>(
+                  value: _assignedTo,
                   decoration: const InputDecoration(
-                    labelText: 'Deadline',
+                    labelText: 'Assigned To',
                     border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.calendar_today),
                   ),
-                  child: Text(DateFormat('MMMM dd, yyyy').format(_deadline)),
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _updateTask,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurple,
-                    foregroundColor: Colors.white,
-                  ),
-                  child:
-                      _isLoading
-                          ? const CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white,
-                            ),
-                          )
-                          : const Text('Update Task'),
-                ),
-              ),
-            ],
-          ),
+                  items: [
+                    const DropdownMenuItem(
+                      value: null,
+                      child: Text('Unassigned'),
+                    ),
+                    ...authProvider.users.map((user) {
+                      return DropdownMenuItem(
+                        value: user.id,
+                        child: Text(user.name),
+                      );
+                    }),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _assignedTo = value);
+                  },
+                );
+              },
+            ),
+          ],
         ),
       ),
     );

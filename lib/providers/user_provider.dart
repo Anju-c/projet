@@ -1,22 +1,53 @@
 import 'package:flutter/material.dart';
-import 'package:logger/logger.dart';
 import '../models/user_model.dart';
 import '../services/supabase_service.dart';
 
-class UserProvider with ChangeNotifier {
+class UserProvider extends ChangeNotifier {
+  final SupabaseService _supabaseService;
+  UserModel? _currentUser;
   UserModel? _user;
-  bool _isTeacher = false;
   String? _error;
   bool _isLoading = false;
 
+  UserProvider(this._supabaseService);
+
+  UserModel? get currentUser => _currentUser;
   UserModel? get user => _user;
-  bool get isTeacher => _isTeacher;
   String? get error => _error;
   bool get isLoading => _isLoading;
-  bool get isLoggedIn => _user != null;
+ 
+  bool get isLoggedIn => _currentUser != null;
 
-  final SupabaseService supabaseService = SupabaseService();
-  final Logger _logger = Logger();
+  Future<void> loadCurrentUser() async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      _currentUser = await _supabaseService.getCurrentUser();
+    } catch (e) {
+      _error = 'Failed to load user: $e';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<UserModel?> getUser(String userId) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      return await _supabaseService.getUser(userId);
+    } catch (e) {
+      _error = 'Failed to get user: $e';
+      return null;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 
   Future<void> loadUser() async {
     _isLoading = true;
@@ -24,85 +55,33 @@ class UserProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final user = supabaseService.client.auth.currentUser;
-      if (user != null) {
-        _logger.i('Authenticated user ID: ${user.id}');
-        final userData = await supabaseService.getUserProfile(user.id);
-        _user = UserModel.fromJson(userData);
-        _logger.i('User profile loaded: ${_user!.id}');
-        _isTeacher = _user!.role == 'teacher';
-      } else {
-        _logger.w('No authenticated user found');
-        _user = null;
-      }
+      _user = await _supabaseService.getCurrentUser();
+      _error = null;
     } catch (e) {
       _error = e.toString();
-      _logger.e('Error loading user: $_error');
+      _user = null;
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  Future<void> signUp({
-    required String email,
-    required String password,
-    required String name,
-    required bool isTeacher,
+  Future<void> updateUser({
+    required String userId,
+    String? name,
+    bool? isTeacher,
   }) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-
     try {
-      await supabaseService.signUp(
-        email: email,
-        password: password,
+      final updatedUser = await _supabaseService.updateUser(
+        userId: userId,
         name: name,
         isTeacher: isTeacher,
       );
-      await loadUser();
+      _user = updatedUser;
+      notifyListeners();
     } catch (e) {
       _error = e.toString();
-      _logger.e('Error in signUp: $_error');
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  Future<void> signIn({required String email, required String password}) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-
-    try {
-      await supabaseService.signIn(email: email, password: password);
-      await loadUser();
-    } catch (e) {
-      _error = e.toString();
-      _logger.e('Error in signIn: $_error');
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  Future<void> signOut() async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-
-    try {
-      await supabaseService.signOut();
-      _user = null;
-      _isTeacher = false;
-    } catch (e) {
-      _error = e.toString();
-      _logger.e('Error in signOut: $_error');
-    } finally {
-      _isLoading = false;
-      notifyListeners();
+      rethrow;
     }
   }
 
