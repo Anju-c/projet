@@ -1,16 +1,3 @@
 # profin1
 
-A new Flutter project.
-
-## Getting Started
-
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+It is a project management app using flutter and supabase as backend. In this app we can effectively manage the project details and in this app,the members can collaborate to create tasks and set deadline.Respectives guides of each team can evaluate the team progress through their login
